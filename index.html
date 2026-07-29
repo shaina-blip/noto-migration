@@ -32,6 +32,9 @@ html,body{height:100%;overflow:hidden;font-family:var(--font);color:var(--text);
 .fb{font-size:11px;padding:3px 9px;border:1px solid var(--border);border-radius:10px;background:#fff;color:var(--muted);cursor:pointer;font-family:var(--font);transition:all .15s}
 .fb:hover{border-color:var(--green);color:var(--green)}
 .fb.on{background:var(--green);color:#fff;border-color:var(--green)}
+.s-sort-row{display:flex;gap:6px;padding:8px 12px;border-bottom:1px solid var(--border);flex-shrink:0}
+.ctrl-select{flex:1;min-width:0;font-size:11px;padding:5px 7px;border:1px solid var(--border);border-radius:var(--radius);background:#fff;color:var(--text);font-family:var(--font);cursor:pointer;outline:none}
+.ctrl-select:focus{border-color:var(--green)}
 .s-meta{padding:5px 12px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;flex-shrink:0;background:var(--bg)}
 .s-io{display:flex;gap:6px;padding:8px 12px;border-bottom:1px solid var(--border);flex-shrink:0}
 .io-btn{flex:1;font-size:11px;font-weight:600;font-family:var(--font);padding:5px 6px;border-radius:var(--radius);cursor:pointer;text-align:center;transition:all .15s}
@@ -142,6 +145,15 @@ td.cb-cell{text-align:center;width:36px}
       <button class="fb" data-f="early">Early start</button>
       <button class="fb" data-f="todo">To-do</button>
     </div>
+    <div class="s-sort-row" id="sort-row">
+      <select id="sort-select" class="ctrl-select" aria-label="Sort students">
+        <option value="name">Sort: Name A–Z</option>
+        <option value="sessions">Sort: Most sessions</option>
+      </select>
+      <select id="educator-select" class="ctrl-select" aria-label="Filter by educator">
+        <option value="all">All educators</option>
+      </select>
+    </div>
     <div class="s-meta">
       <span id="list-count">—</span>
       <span id="done-count">—</span>
@@ -171,18 +183,23 @@ var S={
 };
 function isDone(s){if(S.stu()[s.n])return true;if(!s.ss.length)return false;var sd=S.sess();return s.ss.every(function(x){return sd[S.key(s.n,x)];});}
 function prog(s){var sd=S.sess();return s.ss.filter(function(x){return sd[S.key(s.n,x)];}).length;}
-var sel=null,filt='all',q='';
+var sel=null,filt='all',q='',sortBy='name',edFilt='all';
 function esc(str){return str.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;');}
 function renderList(){
   var list=document.getElementById('list');
   var ql=q.toLowerCase();
   var items=DATA.filter(function(s){
     if(ql&&s.n.toLowerCase().indexOf(ql)<0)return false;
+    if(edFilt!=='all'&&s.ed!==edFilt)return false;
     if(filt==='bridge')return s.sv==='Bridge Program';
     if(filt==='launch')return s.sv==='Launch Program';
     if(filt==='early')return s.se;
     if(filt==='todo')return !isDone(s);
     return true;
+  });
+  items.sort(function(a,b){
+    if(sortBy==='sessions')return b.ss.length-a.ss.length||a.n.localeCompare(b.n);
+    return a.n.localeCompare(b.n);
   });
   var doneN=items.filter(isDone).length;
   document.getElementById('list-count').textContent=items.length+' students';
@@ -337,6 +354,15 @@ document.getElementById('filters').addEventListener('click',function(e){
   var b=e.target.closest('.fb');if(!b)return;
   filt=b.dataset.f;document.querySelectorAll('.fb').forEach(function(x){x.classList.toggle('on',x===b);});renderList();
 });
+document.getElementById('sort-select').addEventListener('change',function(e){sortBy=e.target.value;renderList();});
+document.getElementById('educator-select').addEventListener('change',function(e){edFilt=e.target.value;renderList();});
+(function populateEducators(){
+  var edSel=document.getElementById('educator-select');
+  var eds=Array.from(new Set(DATA.map(function(s){return s.ed;}).filter(Boolean))).sort(function(a,b){return a.localeCompare(b);});
+  eds.forEach(function(ed){
+    var opt=document.createElement('option');opt.value=ed;opt.textContent=ed;edSel.appendChild(opt);
+  });
+})();
 renderList();
 </script>
 </body>
