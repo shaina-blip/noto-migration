@@ -179,6 +179,23 @@ td.cb-cell{text-align:center;width:36px}
 </div>
 <script>
 var DATA = JSON.parse(document.getElementById('weo-data').textContent);
+(function fixMismatchedEducators(){
+  DATA.forEach(function(s){
+    var pool=(s.hist&&s.hist.length?s.hist:s.ss)||[];
+    var counts={};
+    pool.forEach(function(x){counts[x.e]=(counts[x.e]||0)+1;});
+    var names=Object.keys(counts);
+    if(!names.length||names.indexOf(s.ed)!==-1)return;
+    var max=Math.max.apply(null,names.map(function(n){return counts[n];}));
+    var top=names.filter(function(n){return counts[n]===max;});
+    s.ed=top.length===1?top[0]:'Multiple educators';
+  });
+})();
+(function fixMismatchedProgram(){
+  DATA.forEach(function(s){
+    if(s.p&&s.p.svc&&s.p.svc!==s.sv)s.sv=s.p.svc;
+  });
+})();
 var S={
   sess:function(){try{return JSON.parse(localStorage.getItem('weo_sess')||'{}')}catch(e){return{}}},
   stu:function(){try{return JSON.parse(localStorage.getItem('weo_stu')||'{}')}catch(e){return{}}},
