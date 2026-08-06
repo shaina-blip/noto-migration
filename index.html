@@ -36,6 +36,15 @@ html,body{height:100%;overflow:hidden;font-family:var(--font);color:var(--text);
 .ctrl-select{flex:1;min-width:0;font-size:11px;padding:5px 7px;border:1px solid var(--border);border-radius:var(--radius);background:#fff;color:var(--text);font-family:var(--font);cursor:pointer;outline:none}
 .ctrl-select:focus{border-color:var(--green)}
 .s-meta{padding:5px 12px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;flex-shrink:0;background:var(--bg)}
+.s-sync{display:flex;align-items:center;gap:6px;padding:6px 12px;border-bottom:1px solid var(--border);font-size:11px;color:var(--muted);flex-shrink:0;flex-wrap:wrap;row-gap:2px}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:#ccc;flex-shrink:0}
+.s-sync.live .sync-dot{background:var(--green)}
+.s-sync.connecting .sync-dot{background:var(--amber-bd);animation:sync-pulse 1.2s infinite}
+.s-sync.offline .sync-dot{background:var(--red-bd)}
+@keyframes sync-pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.sync-txt{flex:1 1 auto;min-width:130px}
+.sync-push{font-size:10px;font-weight:600;color:var(--blue);background:none;border:none;cursor:pointer;padding:2px 4px;white-space:nowrap;font-family:var(--font);margin-left:auto}
+.sync-push:hover{text-decoration:underline}
 .s-io{display:flex;gap:6px;padding:8px 12px;border-bottom:1px solid var(--border);flex-shrink:0}
 .io-btn{flex:1;font-size:11px;font-weight:600;font-family:var(--font);padding:5px 6px;border-radius:var(--radius);cursor:pointer;text-align:center;transition:all .15s}
 .io-btn.export{background:var(--green-pale);color:var(--green-dk);border:1px solid var(--border)}
@@ -185,6 +194,10 @@ td.cb-cell{text-align:center;width:36px}
       <span id="list-count">—</span>
       <span id="done-count">—</span>
     </div>
+    <div class="s-sync connecting" id="sync-status">
+      <span class="sync-dot"></span><span class="sync-txt">Connecting…</span>
+      <button class="sync-push" id="push-btn" onclick="pushLocalToShared()" title="Upload this device's current progress to the shared tracker">Push my progress &uarr;</button>
+    </div>
     <div class="s-io">
       <button class="io-btn export" onclick="exportProgress()">Export progress</button>
       <label class="io-btn import">Import progress<input type="file" accept=".json" style="display:none" onchange="importProgress(event)"></label>
@@ -199,6 +212,8 @@ td.cb-cell{text-align:center;width:36px}
     <div class="detail-wrap" id="detail" style="display:none"></div>
   </div>
 </div>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script>
 var DATA = JSON.parse(document.getElementById('weo-data').textContent);
 (function fixMismatchedEducators(){
@@ -218,13 +233,69 @@ var DATA = JSON.parse(document.getElementById('weo-data').textContent);
     if(s.p&&s.p.svc&&s.p.svc!==s.sv)s.sv=s.p.svc;
   });
 })();
+function setSyncStatus(state,msg){
+  var el=document.getElementById('sync-status');
+  if(!el)return;
+  el.className='s-sync '+state;
+  el.querySelector('.sync-txt').textContent=msg;
+}
+var progressDoc=null;
+try{
+  if(typeof firebase!=='undefined'){
+    firebase.initializeApp({
+      apiKey:"AIzaSyBV-OYRN53h1rw9zIGGqRQEh_m8Ttzhvk0",
+      authDomain:"noto-migration.firebaseapp.com",
+      projectId:"noto-migration",
+      storageBucket:"noto-migration.firebasestorage.app",
+      messagingSenderId:"12862529555",
+      appId:"1:12862529555:web:950b3c9d9aefa8b5629fe6"
+    });
+    progressDoc=firebase.firestore().collection('migration').doc('progress');
+  }else{
+    setSyncStatus('offline','Offline — progress saved to this device only');
+  }
+}catch(e){
+  console.error('Firebase init failed',e);
+  setSyncStatus('offline','Offline — progress saved to this device only');
+}
 var S={
   sess:function(){try{return JSON.parse(localStorage.getItem('weo_sess')||'{}')}catch(e){return{}}},
   stu:function(){try{return JSON.parse(localStorage.getItem('weo_stu')||'{}')}catch(e){return{}}},
-  setSess:function(k,v){var d=this.sess();d[k]=v;localStorage.setItem('weo_sess',JSON.stringify(d));},
-  setStu:function(n,v){var d=this.stu();d[n]=v;localStorage.setItem('weo_stu',JSON.stringify(d));},
+  setSess:function(k,v){
+    var d=this.sess();d[k]=v;localStorage.setItem('weo_sess',JSON.stringify(d));
+    if(progressDoc){var o={};o[k]=v;progressDoc.set({sess:o},{merge:true}).catch(function(e){console.error('sync failed',e);});}
+  },
+  setStu:function(n,v){
+    var d=this.stu();d[n]=v;localStorage.setItem('weo_stu',JSON.stringify(d));
+    if(progressDoc){var o={};o[n]=v;progressDoc.set({stu:o},{merge:true}).catch(function(e){console.error('sync failed',e);});}
+  },
   key:function(name,sess){return name+'|'+sess.d+'|'+sess.t;}
 };
+window.pushLocalToShared=function(){
+  if(!progressDoc){alert('Not connected to the shared tracker right now — check your internet connection and reload.');return;}
+  var btn=document.getElementById('push-btn');if(btn){btn.disabled=true;btn.textContent='Pushing…';}
+  progressDoc.set({sess:S.sess(),stu:S.stu()},{merge:true}).then(function(){
+    if(btn){btn.disabled=false;btn.textContent='Push my progress ↑';}
+    alert('This device’s progress has been pushed to the shared tracker.');
+  }).catch(function(e){
+    if(btn){btn.disabled=false;btn.textContent='Push my progress ↑';}
+    alert('Push failed: '+e.message);
+  });
+};
+if(progressDoc){
+  progressDoc.onSnapshot(function(snap){
+    var data=snap.data();
+    if(data){
+      if(data.sess)localStorage.setItem('weo_sess',JSON.stringify(data.sess));
+      if(data.stu)localStorage.setItem('weo_stu',JSON.stringify(data.stu));
+    }
+    setSyncStatus('live','Live sync active');
+    if(typeof renderList==='function'){renderList();if(sel)renderDetail();}
+  },function(err){
+    console.error('sync listener error',err);
+    setSyncStatus('offline','Offline — progress saved to this device only');
+  });
+}
 function isDone(s){if(S.stu()[s.n])return true;if(!s.ss.length)return false;var sd=S.sess();return s.ss.every(function(x){return sd[S.key(s.n,x)];});}
 function prog(s){var sd=S.sess();return s.ss.filter(function(x){return sd[S.key(s.n,x)];}).length;}
 var sel=null,filt='all',q='',sortBy='name',edFilt='all';
@@ -425,6 +496,7 @@ window.importProgress=function(e){
     try{var d=JSON.parse(ev.target.result);
       if(d.sessions)localStorage.setItem('weo_sess',JSON.stringify(d.sessions));
       if(d.students)localStorage.setItem('weo_stu',JSON.stringify(d.students));
+      if(progressDoc)progressDoc.set({sess:d.sessions||{},stu:d.students||{}},{merge:true}).catch(function(e){console.error('sync failed',e);});
       renderList();renderDetail();alert('Imported! '+Object.keys(d.students||{}).filter(function(k){return d.students[k];}).length+' students marked done.');
     }catch(err){alert('Could not read file: '+err.message);}
   };r.readAsText(file);
