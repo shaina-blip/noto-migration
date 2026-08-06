@@ -1,6 +1,7 @@
 # Project notes for Claude
 
 - This is a single static `index.html` file (student roster / Noto migration checklist) deployed via GitHub Pages.
+- The `pages-build-deployment` GitHub Action doesn't always trigger automatically on merge to `main` (observed once: the merge that added Firebase sync sat undeployed for 6+ hours with no workflow run at all). If a change isn't showing up live after a merge, check Actions for a `pages-build-deployment` run against the latest commit on `main` — if there isn't one, push any small commit to `main` to force a new one.
 - Student progress checkboxes are stored client-side only, in the browser's `localStorage` (`weo_sess` / `weo_stu` keys) — they are never part of the committed file. Use the built-in "Export progress" / "Import progress" buttons to move state between browsers/devices or as a backup.
 - Standing instruction: after opening a PR against this repo, merge it automatically once it looks clean (no failing checks, no merge conflicts) — don't wait for explicit merge approval each time.
 
